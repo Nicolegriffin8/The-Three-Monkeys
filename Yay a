@@ -1,0 +1,58 @@
+require('dotenv').config();
+const express = require('express');
+const cors = require('cors');
+const Stripe = require('stripe');
+
+if (!process.env.STRIPE_SECRET_KEY) {
+  console.error('Missing STRIPE_SECRET_KEY in .env — see README.md to set this up.');
+  process.exit(1);
+}
+
+const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
+const app = express();
+
+const ALLOWED_ORIGIN = process.env.STOREFRONT_URL || '*';
+app.use(cors({ origin: ALLOWED_ORIGIN }));
+app.use(express.json());
+
+const CATALOG = {
+  'Top Banana': 1800,
+  'Monkey Business': 2000,
+  'Barrel of Fun': 1900,
+  'Jungle Gym': 2100,
+  'Banana Republic': 1800,
+  'Wild Child': 2200,
+};
+
+app.post('/create-checkout-session', async (req, res) => {
+  try {
+    const { items } = req.body;
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'Cart is empty.' });
+    }
+    const line_items = items.map((item) => {
+      const unitAmount = CATALOG[item.name];
+      if (!unitAmount) throw new Error(`Unknown product: ${item.name}`);
+      return {
+        price_data: { currency: 'usd', product_data: { name: item.name }, unit_amount: unitAmount },
+        quantity: Math.max(1, parseInt(item.qty, 10) || 1),
+      };
+    });
+    const session = await stripe.checkout.sessions.create({
+      mode: 'payment',
+      line_items,
+      success_url: `${process.env.STOREFRONT_URL || 'http://localhost:8080'}/success.html?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${process.env.STOREFRONT_URL || 'http://localhost:8080'}/three-monkeys-nails.html`,
+      shipping_address_collection: { allowed_countries: ['US', 'CA'] },
+    });
+    res.json({ url: session.url });
+  } catch (err) {
+    console.error('Checkout session error:', err.message);
+    res.status(500).json({ error: 'Could not start checkout. Please try again.' });
+  }
+});
+
+app.get('/health', (req, res) => res.json({ ok: true }));
+
+const PORT = process.env.PORT || 4242;
+app.listen(PORT, () => console.log(`Checkout backend running on http://localhost:${PORT}`));
