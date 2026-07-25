@@ -1,0 +1,3 @@
+STRIPE_SECRET_KEY=sk_test_xxxxxxxxxxxxxxxxxxxxxxxx
+STOREFRONT_URL=http://localhost:8080
+PORT=4242
